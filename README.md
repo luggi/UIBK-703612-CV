@@ -3,6 +3,6 @@
 # Members of our group:
 * Lukas Schöpf
 * Julian Remmers
-* Nitram Durcek
+* Martin Durcek
 * Franz-Josef Haider
 
