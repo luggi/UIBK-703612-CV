@@ -128,10 +128,6 @@ int main( int argc, char** argv )
       imgpts2.push_back(keypoints_2[matches[i].trainIdx].pt);
   }
 
-
-  cout << "imgpts2[2]= "<< endl << " " << imgpts2[2] << endl << endl;
-
-
   Settings s;
   const string inputSettingsFile = "cameraIntrinsic.xml";
   FileStorage fs(inputSettingsFile, FileStorage::READ); // Read the settings
@@ -160,24 +156,38 @@ int main( int argc, char** argv )
    Mat U = decomp.u;
    Mat Vt = decomp.vt;
    Mat W(3, 3, CV_32F, Scalar(0));
-   W.at<double>(0, 1) = -1;
-   W.at<double>(1, 0) = 1;
-   W.at<double>(2, 2) = 1;
-   Mat R1= U * W * Vt;
-   Mat R2= U * W.t() * Vt;
-   Mat t1=U.col(2);
-   Mat t2=-1*U.col(2);
+   cout << "W= "<< endl << " " << W << endl << endl;
+   W.at<float>(0, 1) = -1.0;
+   W.at<float>(1, 0) = 1.0;
+   W.at<float>(2, 2) = 1.0;
+   cout << "W= "<< endl << " " << W << endl << endl;
+   cout << "W.t()= "<< endl << " " << W.t() << endl << endl;
 
-   Mat P1;
-   hconcat(R1, t1, P1);
-   P1=K*P1;
+   Mat R0= U * W * Vt;
+   cout << "R0= "<< endl << " " << R0 << endl << endl;
+   Mat R1= U * W.t() * Vt;
+   cout << "R1= "<< endl << " " << R1 << endl << endl;
+   Mat t0=U.col(2);
+   cout << "t0= "<< endl << " " << t0 << endl << endl;
+   Mat t1=-1*U.col(2);
+   cout << "t1= "<< endl << " " << t1 << endl << endl;
 
-   cout << "P1= "<< endl << " " << P1 << endl << endl;
+   Mat P11,P12,P13,P14;
+   hconcat(R0, t0, P11);
+   P11=K*P11;
+   hconcat(R1, t0, P12);
+   P12=K*P12;
+   hconcat(R0, t1, P13);
+   P13=K*P13;
+   hconcat(R1, t1, P14);
+   P14=K*P14;
 
+   /*triangulatePoints(cam0,cam1,imgpts1,imgpts2,pnts3D);
+   cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;*/
 
-   /*double max_dist = 0; double min_dist = 100;
+   double max_dist = 0; double min_dist = 100;
 
-  //-- Quick calculation of max and min distances between keypoints
+  //-- Quick calculation of max/home/martin/Downloads/eclipse and min distances between keypoints
   for( int i = 0; i < descriptors_1.rows; i++ )
   { double dist = matches[i].distance;
     if( dist < min_dist ) min_dist = dist;
@@ -190,8 +200,9 @@ int main( int argc, char** argv )
   //-- PS.- radiusMatch can also be used here.
   std::vector< DMatch > good_matches;
 
+
   for( int i = 0; i < descriptors_1.rows; i++ )
-  { if( matches[i].distance <= max(4*min_dist, 0.02) )
+  { if( matches[i].distance <= max(1*min_dist, 0.02) )
     { good_matches.push_back( matches[i]); }
   }
 
@@ -204,12 +215,37 @@ int main( int argc, char** argv )
   //-- Show detected matches
   imshow( "Good Matches", img_matches );
 
+  Mat pnts3D;
+  std::vector< Point2f  > goodPoints1,goodPoints2;
   for( int i = 0; i < (int)good_matches.size(); i++ )
-  { printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx ); }
+  {
+	  printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx );
+	  goodPoints1.push_back( keypoints_1[good_matches[i].queryIdx].pt);
+	  goodPoints2.push_back( keypoints_2[good_matches[i].trainIdx].pt);
+  }
+  triangulatePoints(P0,P11,goodPoints1,goodPoints2,pnts3D);
+  cout << "goodPoints2= "<< endl << " " << goodPoints2 << endl << endl;
+
+  pnts3D=P11*pnts3D;
+  cout << "P11= "<< endl << " " << P11 << endl << endl;
+  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+  triangulatePoints(P0,P12,goodPoints1,goodPoints2,pnts3D);
+  pnts3D=P12*pnts3D;
+  cout << "P12= "<< endl << " " << P12 << endl << endl;
+  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+  triangulatePoints(P0,P13,goodPoints1,goodPoints2,pnts3D);
+  pnts3D=P13*pnts3D;
+  cout << "P13= "<< endl << " " << P13 << endl << endl;
+  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+  triangulatePoints(P0,P14,goodPoints1,goodPoints2,pnts3D);
+  pnts3D=P14*pnts3D;
+  cout << "P14= "<< endl << " " << P14 << endl << endl;
+  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+
+
 
   waitKey(0);
 
-*/
 
   return 0;
 }
