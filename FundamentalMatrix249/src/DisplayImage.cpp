@@ -18,6 +18,7 @@ int main(int, char**)
 # include "opencv2/nonfree/features2d.hpp"
 #include "opencv2/nonfree/nonfree.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
+#include <opencv2/imgproc/imgproc.hpp>
 
 using namespace cv;
 using namespace std;
@@ -89,7 +90,9 @@ int main( int argc, char** argv )
   { readme(); return -1; }
 
   Mat img_1 = imread( argv[1], CV_LOAD_IMAGE_COLOR );
+  //img_1.resize(CV_WINDOW_AUTOSIZE);
   Mat img_2 = imread( argv[2], CV_LOAD_IMAGE_COLOR );
+  //img_2.resize(CV_WINDOW_AUTOSIZE);
 
   if( !img_1.data || !img_2.data )
   { printf(" --(!) Error reading images \n"); return -1; }
@@ -139,8 +142,43 @@ int main( int argc, char** argv )
       fs["Settings"] >> s;
       fs.release();                                         // close Settings file
 
+      //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist,
+      //-- or a small arbitary value ( 0.02 ) in the event that min_dist is very
+      //-- small)
+      //-- PS.- radiusMatch can also be used here.
+      std::vector< DMatch > good_matches,good_matches_filtered;
+
+      double max_dist = 0; double min_dist = 100;
+
+      //-- Quick calculation of max/home/martin/Downloads/eclipse and min distances between keypoints
+        for( int i = 0; i < descriptors_1.rows; i++ )
+        { double dist = matches[i].distance;
+          if( dist < min_dist ) min_dist = dist;
+          if( dist > max_dist ) max_dist = dist;
+        }
+
+      for( int i = 0; i < descriptors_1.rows; i++ )
+      { if( matches[i].distance <= max(2*min_dist, 0.02) )
+        { good_matches.push_back( matches[i]); }
+      }
+
+      vector<Point2f>imgpts3,imgpts4;
+        for( unsigned int i = 0; i<good_matches.size(); i++ )
+        {
+            // queryIdx is the "left" image
+            imgpts3.push_back(keypoints_1[good_matches[i].queryIdx].pt);
+            // trainIdx is the "right" image
+            imgpts4.push_back(keypoints_2[good_matches[i].trainIdx].pt);
+        }
+
    Mat f_mask;
-   Mat F =  findFundamentalMat (imgpts1, imgpts2, FM_RANSAC, 0.5, 0.99, f_mask);
+   Mat F =  findFundamentalMat (imgpts3, imgpts4, FM_RANSAC, 0.5, 0.99, f_mask);
+
+   for( int i = 0; i < descriptors_1.rows; i++ )
+         { if( f_mask.at<int>(i,0) == 1 )
+           { good_matches_filtered.push_back( matches[i]); }
+         }
+
    F.convertTo(F, CV_32F);
    float data[9] = {s.p11,s.p12,s.p13,s.p21,s.p22,s.p23,s.p31,s.p32,s.p33};
    Mat K = Mat(3,3, CV_32F,data);
@@ -182,38 +220,19 @@ int main( int argc, char** argv )
    hconcat(R1, t1, P14);
    P14=K*P14;
 
-   /*triangulatePoints(cam0,cam1,imgpts1,imgpts2,pnts3D);
-   cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;*/
-
-   double max_dist = 0; double min_dist = 100;
-
-  //-- Quick calculation of max/home/martin/Downloads/eclipse and min distances between keypoints
-  for( int i = 0; i < descriptors_1.rows; i++ )
-  { double dist = matches[i].distance;
-    if( dist < min_dist ) min_dist = dist;
-    if( dist > max_dist ) max_dist = dist;
-  }
-
-  //-- Draw only "good" matches (i.e. whose distance is less than 2*min_dist,
-  //-- or a small arbitary value ( 0.02 ) in the event that min_dist is very
-  //-- small)
-  //-- PS.- radiusMatch can also be used here.
-  std::vector< DMatch > good_matches;
-
-
-  for( int i = 0; i < descriptors_1.rows; i++ )
-  { if( matches[i].distance <= max(1*min_dist, 0.02) )
-    { good_matches.push_back( matches[i]); }
-  }
 
   //-- Draw only "good" matches
   Mat img_matches;
   drawMatches( img_1, keypoints_1, img_2, keypoints_2,
-               good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
+               good_matches_filtered, img_matches, Scalar::all(-1), Scalar::all(-1),
                vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 
   //-- Show detected matches
-  imshow( "Good Matches", img_matches );
+  namedWindow("Good Matches",CV_WINDOW_AUTOSIZE);
+  Size size(800,600);
+  Mat img_matches_resized;
+  resize(img_matches,img_matches_resized,Size(0,0),0.2,0.2,CV_INTER_AREA);
+  imshow( "Good Matches", img_matches_resized);
 
   Mat pnts3D;
   std::vector< Point2f  > goodPoints1,goodPoints2;
@@ -242,7 +261,21 @@ int main( int argc, char** argv )
   cout << "P14= "<< endl << " " << P14 << endl << endl;
   cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
 
+  cout << "fmask size= "<< endl << " " << f_mask.rows << endl << endl;
 
+/*
+  std::vector<Point2f> obj;
+  std::vector<Point2f> scene;
+
+    for( int i = 0; i < good_matches.size(); i++ )
+    {
+      //-- Get the keypoints from the good matches
+      obj.push_back( keypoints_1[ good_matches[i].queryIdx ].pt );
+      scene.push_back( keypoints_2[ good_matches[i].trainIdx ].pt );
+    }
+
+    Mat H = findHomography( obj, scene, CV_RANSAC,);
+    cout << "H= "<< endl << " " << H << endl << endl;*/
 
   waitKey(0);
 
