@@ -74,7 +74,9 @@ public:
 };
 
 void readme();
-void Fourfold_Ambiguity(Mat F, Settings s);
+vector<Mat> fourfold_Ambiguity(Mat F, Settings s,vector<Point2f>goodPoints1,vector<Point2f>goodPoints2);
+void drawCube(Mat& image, int x, int y,int z ,int length, Mat cameraMatrix,vector<Mat> RotationTranslation);
+
 
 static void read(const FileNode& node, Settings& x, const Settings& default_value = Settings())
 {
@@ -113,9 +115,9 @@ int main( int argc, char** argv )
   { printf(" --(!) Error reading images \n"); return -1; }
 
   ///////////////////////////////-- Step 1: Detect the keypoints using SURF Detector////////////////////////////
-  int minHessian = 400;
+  int minHessian = 800;
 
-  SurfFeatureDetector detector( minHessian );
+  SurfFeatureDetector detector(minHessian);
 
   std::vector<KeyPoint> keypoints_1, keypoints_2;
 
@@ -158,8 +160,10 @@ int main( int argc, char** argv )
   ///////////////////////////////-- Step 6: Filter only good matches according to the distance/////////////////
     std::vector< DMatch > good_matches,good_matches_filtered;
       for( int i = 0; i < descriptors_1.rows; i++ )
-      { if( matches[i].distance <= max(2*min_dist, 0.02) )
-        { good_matches.push_back( matches[i]); }
+      { if( matches[i].distance <= max(3*min_dist, 0.02) )
+        {
+    	  good_matches.push_back( matches[i]);
+        }
       }
 
 
@@ -177,63 +181,52 @@ int main( int argc, char** argv )
    Mat f_mask;
    Mat F =  findFundamentalMat (imgpts3, imgpts4, FM_RANSAC, 0.5, 0.99, f_mask);
 
+
    ////////////////////////////-- Step 9: Filter good matches again - now according to RANSAC /////////////////
-   for( int i = 0; i < descriptors_1.rows; i++ )
-         { if( f_mask.at<int>(i,0) == 1 )
-           { good_matches_filtered.push_back( matches[i]); }
+
+   for( int i = 0; i < (int)good_matches.size(); i++ )
+         {
+	   	   if( f_mask.at<int>(i,0) == 1 )
+           {
+	   		   good_matches_filtered.push_back( good_matches[i]);
+           }
          }
-
-   Fourfold_Ambiguity(F,s);
-
+   cout << good_matches_filtered.size() << endl;
 
   ////////////////////////////-- Step 9: Draw only "best" matches /////////////////////////////////////////////
   Mat img_matches;
   drawMatches( img_1, keypoints_1, img_2, keypoints_2,
                good_matches_filtered, img_matches, Scalar::all(-1), Scalar::all(-1),
-               vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+               vector<char>(), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 
   //-- Show detected matches
-  namedWindow("Best Matches",CV_WINDOW_AUTOSIZE);
-  Size size(800,600);
   Mat img_matches_resized;
   resize(img_matches,img_matches_resized,Size(0,0),0.2,0.2,CV_INTER_AREA);
-  imshow( "Good Matches", img_matches_resized);
 
-  Mat pnts3D;
-  std::vector< Point2f  > goodPoints1,goodPoints2;
-  for( int i = 0; i < (int)good_matches.size(); i++ )
+  std::vector<Point2f> goodPoints1,goodPoints2;
+  for( int i = 0; i < (int)good_matches_filtered.size(); i++ )
   {
-	  printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx );
-	  goodPoints1.push_back( keypoints_1[good_matches[i].queryIdx].pt);
-	  goodPoints2.push_back( keypoints_2[good_matches[i].trainIdx].pt);
+	  printf( "-- Good Match Filtered [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches_filtered[i].queryIdx, good_matches_filtered[i].trainIdx );
+	  goodPoints1.push_back( keypoints_1[good_matches_filtered[i].queryIdx].pt);
+	  goodPoints2.push_back( keypoints_2[good_matches_filtered[i].trainIdx].pt);
   }
-  /*triangulatePoints(P0,P11,goodPoints1,goodPoints2,pnts3D);
-  cout << "goodPoints2= "<< endl << " " << goodPoints2 << endl << endl;
 
-  pnts3D=P11*pnts3D;
-  cout << "P11= "<< endl << " " << P11 << endl << endl;
-  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
-  triangulatePoints(P0,P12,goodPoints1,goodPoints2,pnts3D);
-  pnts3D=P12*pnts3D;
-  cout << "P12= "<< endl << " " << P12 << endl << endl;
-  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
-  triangulatePoints(P0,P13,goodPoints1,goodPoints2,pnts3D);
-  pnts3D=P13*pnts3D;
-  cout << "P13= "<< endl << " " << P13 << endl << endl;
-  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
-  triangulatePoints(P0,P14,goodPoints1,goodPoints2,pnts3D);
-  pnts3D=P14*pnts3D;
-  cout << "P14= "<< endl << " " << P14 << endl << endl;
-  cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
-*/
-  cout << "fmask size= "<< endl << " " << f_mask.rows << endl << endl;
+
+  vector<Mat> a = fourfold_Ambiguity(F,s,goodPoints1,goodPoints2);
+
+  cout << a[0] << endl;
+  //line( img_matches_resized, cvPoint(0,0), cvPoint(700,70), Scalar(0, 255, 0), 4 );
+  float data[9] = {s.p11,s.p12,s.p13,s.p21,s.p22,s.p23,s.p31,s.p32,s.p33};
+  Mat K = Mat(3,3, CV_32F,data);
+  drawCube(img_matches_resized,0,0,0,100,K,a);
+  imshow( "Good Matches", img_matches_resized);
 
   waitKey(0);
   return 0;
 }
 
 
-void Fourfold_Ambiguity(Mat F,Settings s)
+vector<Mat> fourfold_Ambiguity(Mat F,Settings s,vector<Point2f> goodPoints1,vector<Point2f>goodPoints2)
 {
 	   F.convertTo(F, CV_32F);
 	   float data[9] = {s.p11,s.p12,s.p13,s.p21,s.p22,s.p23,s.p31,s.p32,s.p33};
@@ -250,21 +243,21 @@ void Fourfold_Ambiguity(Mat F,Settings s)
 	   Mat U = decomp.u;
 	   Mat Vt = decomp.vt;
 	   Mat W(3, 3, CV_32F, Scalar(0));
-	   cout << "W= "<< endl << " " << W << endl << endl;
+	   //cout << "W= "<< endl << " " << W << endl << endl;
 	   W.at<float>(0, 1) = -1.0;
 	   W.at<float>(1, 0) = 1.0;
 	   W.at<float>(2, 2) = 1.0;
-	   cout << "W= "<< endl << " " << W << endl << endl;
-	   cout << "W.t()= "<< endl << " " << W.t() << endl << endl;
+	   //cout << "W= "<< endl << " " << W << endl << endl;
+	   //cout << "W.t()= "<< endl << " " << W.t() << endl << endl;
 
 	   Mat R0= U * W * Vt;
-	   cout << "R0= "<< endl << " " << R0 << endl << endl;
+	   //cout << "R0= "<< endl << " " << R0 << endl << endl;
 	   Mat R1= U * W.t() * Vt;
-	   cout << "R1= "<< endl << " " << R1 << endl << endl;
+	   //cout << "R1= "<< endl << " " << R1 << endl << endl;
 	   Mat t0=U.col(2);
-	   cout << "t0= "<< endl << " " << t0 << endl << endl;
+	   //cout << "t0= "<< endl << " " << t0 << endl << endl;
 	   Mat t1=-1*U.col(2);
-	   cout << "t1= "<< endl << " " << t1 << endl << endl;
+	   //cout << "t1= "<< endl << " " << t1 << endl << endl;
 
 	   Mat P11,P12,P13,P14;
 	   hconcat(R0, t0, P11);
@@ -275,6 +268,49 @@ void Fourfold_Ambiguity(Mat F,Settings s)
 	   P13=K*P13;
 	   hconcat(R1, t1, P14);
 	   P14=K*P14;
+
+	   Mat pnts3D;
+	   triangulatePoints(P0,P11,goodPoints1,goodPoints2,pnts3D);
+	 cout << "goodPoints2= "<< endl << " " << goodPoints2 << endl << endl;
+
+	 pnts3D=P11*pnts3D;
+	 cout << "P11= "<< endl << " " << P11 << endl << endl;
+	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+	 triangulatePoints(P0,P12,goodPoints1,goodPoints2,pnts3D);
+	 pnts3D=P12*pnts3D;
+	 cout << "P12= "<< endl << " " << P12 << endl << endl;
+	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+	 triangulatePoints(P0,P13,goodPoints1,goodPoints2,pnts3D);
+	 pnts3D=P13*pnts3D;
+	 cout << "P13= "<< endl << " " << P13 << endl << endl;
+	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+	 triangulatePoints(P0,P14,goodPoints1,goodPoints2,pnts3D);
+	 pnts3D=P14*pnts3D;
+	 cout << "P14= "<< endl << " " << P14 << endl << endl;
+	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+
+	 vector<Mat> toReturn;
+	 toReturn.push_back(R1);
+	 toReturn.push_back(t1);
+	 return toReturn;
+}
+
+void drawCube(Mat& image, int x, int y, int z, int length, Mat cameraMatrix, vector<Mat> RotationTranslation){
+    vector<Point2d> outputPoints;
+    vector<Point2d> distPar;
+	vector<Point3d> points;
+	points.push_back(Point3d(x,y,z));
+	points.push_back(Point3d(x+length,y,z));
+	points.push_back(Point3d(x,y,z+length));
+	points.push_back(Point3d(x+length,y,z+length));
+	points.push_back(Point3d(x,y+length,z));
+	points.push_back(Point3d(x+length,y+length,z));
+	points.push_back(Point3d(x,y+length,z+length));
+	points.push_back(Point3d(x+length,y+length,z+length));
+
+	//projectPoints(points,RotationTranslation[0],RotationTranslation[1],cameraMatrix,distPar,outputPoints);
+	//cout << "aa" << endl;
+	//cout << outputPoints << endl;
 }
 
 
@@ -282,4 +318,26 @@ void readme()
 { printf(" Usage: ./SURF_FlannMatcher <img1> <img2>\n"); }
 
 #endif
+
+
+
+
+
+
+
+/*
+ *   vector<Point2f>imgptsRANSAC1,imgptsRANSAC2;
+  for( int i = 0; i < (int)good_matches_filtered.size(); i++ ){
+	  imgptsRANSAC1.push_back(keypoints_1[good_matches_filtered[i].queryIdx].pt);
+	  // trainIdx is the "right" image
+	  imgptsRANSAC2.push_back(keypoints_2[good_matches_filtered[i].trainIdx].pt);
+  }
+  vector<KeyPoint>keypointsRANSAC1,keypointsRANSAC2;
+  for( int i = 0; i < (int)imgptsRANSAC1.size(); i++ )
+	{
+	  keypointsRANSAC1.push_back(KeyPoint(imgptsRANSAC1[i], 1.f));
+	  keypointsRANSAC2.push_back(KeyPoint(imgptsRANSAC2[i], 1.f));
+	}
+ * */
+
 
