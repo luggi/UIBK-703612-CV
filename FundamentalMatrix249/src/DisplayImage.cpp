@@ -76,7 +76,7 @@ public:
 void readme();
 vector<Mat> fourfold_Ambiguity(Mat F, Settings s,vector<Point2f>goodPoints1,vector<Point2f>goodPoints2);
 void drawCube(Mat& image, int x, int y,int z ,int length, Mat cameraMatrix,vector<Mat> RotationTranslation);
-
+void drawCube2(Mat& image, int x, int y,int z ,int length, Mat cameraMatrix,vector<Mat> RotationTranslation);
 
 static void read(const FileNode& node, Settings& x, const Settings& default_value = Settings())
 {
@@ -197,7 +197,7 @@ int main( int argc, char** argv )
   Mat img_matches;
   drawMatches( img_1, keypoints_1, img_2, keypoints_2,
                good_matches_filtered, img_matches, Scalar::all(-1), Scalar::all(-1),
-               vector<char>(), DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
+               vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
 
   //-- Show detected matches
   Mat img_matches_resized;
@@ -212,13 +212,38 @@ int main( int argc, char** argv )
   }
 
 
-  vector<Mat> a = fourfold_Ambiguity(F,s,goodPoints1,goodPoints2);
+  vector<Mat> temp = fourfold_Ambiguity(F,s,goodPoints1,goodPoints2);
+  Mat projectionMatrix1 = temp[1];
+  Mat projectionMatrix2 = temp[2];
+  Mat testPoint = temp[0].col(5);
 
-  cout << a[0] << endl;
-  //line( img_matches_resized, cvPoint(0,0), cvPoint(700,70), Scalar(0, 255, 0), 4 );
+  cout << testPoint << endl;
+  Mat projectedPoint1 = Mat_<float>(3,1);
+  projectedPoint1 = projectionMatrix1*testPoint;
+  Mat projectedPoint2 = Mat_<float>(3,1);
+  projectedPoint2 = projectionMatrix2*testPoint;
+
+  Point point1;
+  point1.x = projectedPoint1.at<float>(0,0);
+  point1.y = projectedPoint1.at<float>(1,0);
+  circle(img_1,point1,30, Scalar(0,0,255),CV_FILLED, 8,0);
+  Mat img_1_resized;
+  resize(img_1,img_1_resized,Size(0,0),0.2,0.2,CV_INTER_AREA);
+  imshow( "Img1", img_1_resized);
+
+  Point point2;
+  point2.x = projectedPoint2.at<float>(0,0);
+  point2.y = projectedPoint2.at<float>(1,0);
+  circle(img_2,point2,30, Scalar(0,0,255),CV_FILLED, 8,0);
+  Mat img_2_resized;
+  resize(img_2,img_2_resized,Size(0,0),0.2,0.2,CV_INTER_AREA);
+  imshow( "Img2", img_2_resized);
+
+
+
   float data[9] = {s.p11,s.p12,s.p13,s.p21,s.p22,s.p23,s.p31,s.p32,s.p33};
   Mat K = Mat(3,3, CV_32F,data);
-  drawCube(img_matches_resized,0,0,0,100,K,a);
+  //drawCube(img_matches_resized,0,0,0,100,K,temp);
   imshow( "Good Matches", img_matches_resized);
 
   waitKey(0);
@@ -271,33 +296,37 @@ vector<Mat> fourfold_Ambiguity(Mat F,Settings s,vector<Point2f> goodPoints1,vect
 
 	   Mat pnts3D;
 	   triangulatePoints(P0,P11,goodPoints1,goodPoints2,pnts3D);
-	 cout << "goodPoints2= "<< endl << " " << goodPoints2 << endl << endl;
+	 //cout << "goodPoints2= "<< endl << " " << goodPoints2 << endl << endl;
 
 	 pnts3D=P11*pnts3D;
-	 cout << "P11= "<< endl << " " << P11 << endl << endl;
-	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+	 //cout << "P11= "<< endl << " " << P11 << endl << endl;
+	 //cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
 	 triangulatePoints(P0,P12,goodPoints1,goodPoints2,pnts3D);
 	 pnts3D=P12*pnts3D;
-	 cout << "P12= "<< endl << " " << P12 << endl << endl;
-	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+	 //cout << "P12= "<< endl << " " << P12 << endl << endl;
+	 //cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
 	 triangulatePoints(P0,P13,goodPoints1,goodPoints2,pnts3D);
 	 pnts3D=P13*pnts3D;
-	 cout << "P13= "<< endl << " " << P13 << endl << endl;
-	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+	 //cout << "P13= "<< endl << " " << P13 << endl << endl;
+	 //cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
 	 triangulatePoints(P0,P14,goodPoints1,goodPoints2,pnts3D);
-	 pnts3D=P14*pnts3D;
-	 cout << "P14= "<< endl << " " << P14 << endl << endl;
-	 cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
-
 	 vector<Mat> toReturn;
-	 toReturn.push_back(R1);
-	 toReturn.push_back(t1);
+	 toReturn.push_back(pnts3D);
+	 pnts3D=P14*pnts3D;
+	 //cout << "P14= "<< endl << " " << P14 << endl << endl;
+	 //cout << "pnts3D= "<< endl << " " << pnts3D << endl << endl;
+
+	 //toReturn.push_back(R1);
+	 //toReturn.push_back(t1);
+	 toReturn.push_back(P0);
+	 toReturn.push_back(P14);
 	 return toReturn;
 }
 
 void drawCube(Mat& image, int x, int y, int z, int length, Mat cameraMatrix, vector<Mat> RotationTranslation){
+
     vector<Point2d> outputPoints;
-    vector<Point2d> distPar;
+    vector<Point2d> distCoeffs;
 	vector<Point3d> points;
 	points.push_back(Point3d(x,y,z));
 	points.push_back(Point3d(x+length,y,z));
@@ -308,10 +337,79 @@ void drawCube(Mat& image, int x, int y, int z, int length, Mat cameraMatrix, vec
 	points.push_back(Point3d(x,y+length,z+length));
 	points.push_back(Point3d(x+length,y+length,z+length));
 
-	//projectPoints(points,RotationTranslation[0],RotationTranslation[1],cameraMatrix,distPar,outputPoints);
+	Mat onePoint = Mat_<float>(4,1);
+
+	onePoint.at<float>(0,0)=x;
+	onePoint.at<float>(1,0)=y;
+	onePoint.at<float>(2,0)=z;
+	onePoint.at<float>(3,0)=1;
+	cout << onePoint << endl;
+	cout << RotationTranslation[0] << endl;
+	Mat projectedPoint = Mat_<float>(3,1);
+
+	projectedPoint = RotationTranslation[0]*onePoint;
+	cout << projectedPoint << endl;
+
+	//projectPoints(points,rvec,tvec,cameraMatrix,distCoeffs,outputPoints);
+}
+
+/*void drawCube2(Mat& image, int x, int y, int z, int length, Mat cameraMatrix, vector<Mat> RotationTranslation){
+    Mat distPar = Mat_<double>(1,5);
+	vector<Point3d> points;
+	points.push_back(Point3d(x,y,z));
+	points.push_back(Point3d(x+length,y,z));
+	points.push_back(Point3d(x,y,z+length));
+	points.push_back(Point3d(x+length,y,z+length));
+	points.push_back(Point3d(x,y+length,z));
+	points.push_back(Point3d(x+length,y+length,z));
+	points.push_back(Point3d(x,y+length,z+length));
+	points.push_back(Point3d(x+length,y+length,z+length));
+
+	Mat matPoints = Mat_<Point3d>(1,points.size()) << points[0],points[1],points[2],points[3],points[4],points[5],points[6],points[7];
+	Mat outputPoints = Mat_<Point3d>(1,points.size());
+
+	projectPoints(matPoints,RotationTranslation[0],RotationTranslation[1],cameraMatrix,distPar,outpuPoints);
 	//cout << "aa" << endl;
 	//cout << outputPoints << endl;
 }
+
+void drawCube(Mat& image, int x, int y, int z, int length, Mat cameraMatrix, vector<Mat> RotationTranslation){
+    vector<Point2f> outputPoints;
+    vector<Point2f> distPar;
+	vector<Point3f> points;
+	points.push_back(Point3f(x,y,z));
+	points.push_back(Point3f(x+length,y,z));
+	points.push_back(Point3f(x,y,z+length));
+	points.push_back(Point3f(x+length,y,z+length));
+	points.push_back(Point3f(x,y+length,z));
+	points.push_back(Point3f(x+length,y+length,z));
+	points.push_back(Point3f(x,y+length,z+length));
+	points.push_back(Point3f(x+length,y+length,z+length));
+
+	/*vector<float> rvec,tvec;
+	for(int i=0; i<RotationTranslation[1].rows;i++){
+		tvec.push_back(RotationTranslation[1].at<float>(i,0));
+	}
+	Rodrigues(RotationTranslation[0],rvec);*/
+
+    // Decompose the projection matrix into:
+	/*Mat K(3,3,cv::DataType<float>::type); // intrinsic parameter matrix
+    Mat rvec(3,3,cv::DataType<float>::type); // rotation matrix
+    Mat T(4,1,cv::DataType<float>::type); // translation vector
+
+    decomposeProjectionMatrix(RotationTranslation[0], K, rvec, T);
+
+    // Create zero distortion
+    Mat distCoeffs(4,1,cv::DataType<float>::type);
+    distCoeffs.at<float>(0) = 0;
+    distCoeffs.at<float>(1) = 0;
+    distCoeffs.at<float>(2) = 0;
+    distCoeffs.at<float>(3) = 0;
+
+	///decomposeProjectionMatrix(RotationTranslation[0], cameraMatrix, rvec, tvec);
+	projectPoints(points.front(),rvec,T,K,distCoeffs,outputPoints);
+}
+*/
 
 
 void readme()
@@ -322,22 +420,5 @@ void readme()
 
 
 
-
-
-
-/*
- *   vector<Point2f>imgptsRANSAC1,imgptsRANSAC2;
-  for( int i = 0; i < (int)good_matches_filtered.size(); i++ ){
-	  imgptsRANSAC1.push_back(keypoints_1[good_matches_filtered[i].queryIdx].pt);
-	  // trainIdx is the "right" image
-	  imgptsRANSAC2.push_back(keypoints_2[good_matches_filtered[i].trainIdx].pt);
-  }
-  vector<KeyPoint>keypointsRANSAC1,keypointsRANSAC2;
-  for( int i = 0; i < (int)imgptsRANSAC1.size(); i++ )
-	{
-	  keypointsRANSAC1.push_back(KeyPoint(imgptsRANSAC1[i], 1.f));
-	  keypointsRANSAC2.push_back(KeyPoint(imgptsRANSAC2[i], 1.f));
-	}
- * */
 
 
